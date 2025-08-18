@@ -61,5 +61,5 @@ Solution: Run SETUP_VIRC_QC_STATION.bat again
 - Works with both white and black VirtuSense remotes
 
 ================================================================================
-Support: Share the test report file if you need help
+Support: Share the test report file to Systeme team if you need help
 ================================================================================ 
