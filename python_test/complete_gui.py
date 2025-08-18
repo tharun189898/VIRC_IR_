@@ -4,8 +4,11 @@ import threading
 import hid
 import time
 from datetime import datetime
+import os
+import sys
+import winsound  # For sound effects on Windows
 try:
-    from PIL import Image, ImageTk
+    from PIL import Image, ImageTk, ImageDraw
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
@@ -58,7 +61,7 @@ class VIRCCompleteGUI:
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Title
-        title = ttk.Label(main_frame, text="VIRC IR Controller - Complete GUI", 
+        title = ttk.Label(main_frame, text="VIRC IR Controller", 
                          font=('Arial', 16, 'bold'))
         title.pack(pady=(0, 10))
         
