@@ -14,7 +14,10 @@ except ImportError:
     PIL_AVAILABLE = False
 
 # Constants from main.py
-USB_VID = 0x239a
+# Support both Raspberry Pi VID and Adafruit VID (for backward compatibility)
+USB_VID_RASPBERRY_PI = 0x2e8a  # Raspberry Pi VID (official)
+USB_VID_ADAFRUIT = 0x239a      # Adafruit VID (legacy/fallback)
+USB_VID = USB_VID_RASPBERRY_PI  # Default to Raspberry Pi VID
 
 class VIRCCompleteGUI:
     def __init__(self, root):
@@ -24,7 +27,12 @@ class VIRCCompleteGUI:
         self.device = None
         self.is_listening = False
         self.listen_thread = None
-        
+
+        # Performance: IR debouncing to prevent duplicates
+        self.last_ir_code = None
+        self.last_ir_time = 0
+        self.debounce_delay = 0.3  # 300ms debounce
+
         # IR code mappings from main.py
         self.code_map = {
             0xFE017F80: "Short Pause",
@@ -48,26 +56,74 @@ class VIRCCompleteGUI:
             0xFE01FF00, 0xFC03FF00, 0xFB04FF00, 0xF906FF00, 0xF807FF00, 0xF609FF00
         }
         
+        # Keyboard shortcuts
+        self.root.bind('<Control-l>', lambda e: self.clear_log())
+        self.root.bind('<Control-t>', lambda e: self.start_test_mode() if not self.test_mode_active else None)
+        self.root.bind('<Control-s>', lambda e: self.start_listening() if not self.is_listening else self.stop_listening())
+
         self.create_widgets()
         self.refresh_devices()
-        
+
         # Welcome message with styling demonstration
         self.log_message("🚀 VIRC QC Testing Station - Ready", "header")
         self.log_message("Enhanced with colorful logging and improved layout!", "instruction")
-        
+        self.log_message("💡 Keyboard Shortcuts: Ctrl+S (Start/Stop), Ctrl+L (Clear Log), Ctrl+T (Start Test)", "instruction")
+
+    def create_tooltip(self, widget, text):
+        """Create a tooltip for a widget"""
+        def on_enter(event):
+            tooltip = tk.Toplevel()
+            tooltip.wm_overrideredirect(True)
+            tooltip.wm_geometry(f"+{event.x_root+10}+{event.y_root+10}")
+            label = tk.Label(tooltip, text=text, background="#ffffe0", relief=tk.SOLID, borderwidth=1,
+                           font=("Arial", 9), padx=5, pady=3)
+            label.pack()
+            widget.tooltip = tooltip
+
+        def on_leave(event):
+            if hasattr(widget, 'tooltip'):
+                widget.tooltip.destroy()
+                del widget.tooltip
+
+        widget.bind('<Enter>', on_enter)
+        widget.bind('<Leave>', on_leave)
+
     def create_widgets(self):
-        # Main frame
-        main_frame = ttk.Frame(self.root, padding="10")
+        # Configure color theme
+        self.root.configure(bg="#f0f0f0")
+
+        # Create custom styles
+        style = ttk.Style()
+        style.theme_use('clam')
+
+        # Button styles with colors
+        style.configure("Success.TButton", foreground="white", background="#27ae60", font=('Arial', 9, 'bold'))
+        style.map("Success.TButton", background=[('active', '#229954')])
+
+        style.configure("Danger.TButton", foreground="white", background="#e74c3c", font=('Arial', 9, 'bold'))
+        style.map("Danger.TButton", background=[('active', '#c0392b')])
+
+        style.configure("Primary.TButton", foreground="white", background="#3498db", font=('Arial', 9))
+        style.map("Primary.TButton", background=[('active', '#2980b9')])
+
+        style.configure("Info.TButton", foreground="white", background="#16a085", font=('Arial', 9))
+        style.map("Info.TButton", background=[('active', '#138d75')])
+
+        # Main frame with subtle background
+        main_frame = ttk.Frame(self.root, padding="15")
         main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Title with color
+        title_frame = tk.Frame(main_frame, bg="#2c3e50", relief=tk.FLAT)
+        title_frame.pack(fill=tk.X, pady=(0, 10))
+        title = tk.Label(title_frame, text="VIRC IR Controller",
+                         font=('Arial', 16, 'bold'),
+                         bg="#2c3e50", fg="white", pady=8)
+        title.pack()
         
-        # Title
-        title = ttk.Label(main_frame, text="VIRC IR Controller", 
-                         font=('Arial', 16, 'bold'))
-        title.pack(pady=(0, 10))
-        
-        # Device frame
-        device_frame = ttk.LabelFrame(main_frame, text="Device Management", padding="5")
-        device_frame.pack(fill=tk.X, pady=(0, 10))
+        # Device frame (slightly more padding)
+        device_frame = ttk.LabelFrame(main_frame, text="Device Management", padding="10")
+        device_frame.pack(fill=tk.X, pady=(0, 12))
         
         # Device selection
         device_select_frame = ttk.Frame(device_frame)
@@ -91,13 +147,9 @@ class VIRCCompleteGUI:
         self.get_info_btn = ttk.Button(button_frame, text="Get Device Info", command=self.get_device_info, state=tk.DISABLED)
         self.get_info_btn.pack(side=tk.LEFT, padx=5)
         
-        # Create horizontal layout for Device Info and Remote Display
-        info_remote_frame = ttk.Frame(main_frame)
-        info_remote_frame.pack(fill=tk.X, pady=(0, 10))
-        
-        # Device info frame (left side)
-        info_frame = ttk.LabelFrame(info_remote_frame, text="Device Information", padding="5")
-        info_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+        # Device info frame (full width, compact)
+        info_frame = ttk.LabelFrame(main_frame, text="Device Information", padding="5")
+        info_frame.pack(fill=tk.X, pady=(0, 10))
         
         self.device_info = {
             'manufacturer': tk.StringVar(value="N/A"),
@@ -117,151 +169,220 @@ class VIRCCompleteGUI:
             ("Firmware Version:", self.device_info['fw_version'])
         ]
         
+        # Create vertical layout for device info items - each item in its own row
         for i, (label, var) in enumerate(info_items):
             frame = ttk.Frame(info_frame)
             frame.pack(fill=tk.X, padx=5, pady=2)
-            ttk.Label(frame, text=label, width=15).pack(side=tk.LEFT)
-            ttk.Label(frame, textvariable=var, width=25).pack(side=tk.LEFT)
-        
-        # Remote Display frame (right side)
-        remote_frame = ttk.LabelFrame(info_remote_frame, text="Detected Remote", padding="5")
-        remote_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
-        
-        # Create a frame to hold image and info side by side
-        remote_content_frame = ttk.Frame(remote_frame)
-        remote_content_frame.pack(fill=tk.X, expand=True)
-        
-        # Image display area
-        self.image_frame = ttk.Frame(remote_content_frame)
-        self.image_frame.pack(side=tk.LEFT, padx=(0, 10))
-        
-        # Placeholder for remote image
-        self.remote_image_label = ttk.Label(self.image_frame, text="No Remote\nDetected", 
-                                          background="lightgray", width=15, anchor="center")
-        self.remote_image_label.pack(pady=5)
-        
-        # Remote info area
-        remote_info_frame = ttk.Frame(remote_content_frame)
-        remote_info_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        
+            ttk.Label(frame, text=label, width=18, font=("Arial", 9)).pack(side=tk.LEFT)
+            ttk.Label(frame, textvariable=var, font=("Arial", 9)).pack(side=tk.LEFT, padx=(5, 0))
+
+        # Initialize remote tracking variables (will create UI elements later)
         self.remote_type_var = tk.StringVar(value="Unknown")
         self.last_button_var = tk.StringVar(value="None")
         self.signal_count_var = tk.StringVar(value="0")
-        
-        ttk.Label(remote_info_frame, text="Remote Type:").pack(anchor="w")
-        ttk.Label(remote_info_frame, textvariable=self.remote_type_var, 
-                 font=("Arial", 10, "bold")).pack(anchor="w", padx=(10, 0))
-        
-        ttk.Label(remote_info_frame, text="Last Button:").pack(anchor="w", pady=(5, 0))
-        ttk.Label(remote_info_frame, textvariable=self.last_button_var, 
-                 font=("Arial", 9)).pack(anchor="w", padx=(10, 0))
-        
-        ttk.Label(remote_info_frame, text="Signals Received:").pack(anchor="w", pady=(5, 0))
-        ttk.Label(remote_info_frame, textvariable=self.signal_count_var, 
-                 font=("Arial", 9)).pack(anchor="w", padx=(10, 0))
-        
-        # Initialize signal counter
         self.signal_count = 0
-        
-        # IR Monitor frame
-        monitor_frame = ttk.LabelFrame(main_frame, text="IR Signal Monitor", padding="5")
-        monitor_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
-        
+
+        # Create main content area with left and right columns
+        content_container = ttk.Frame(main_frame)
+        content_container.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        # Left column - Controls and Test Progress
+        left_column = ttk.Frame(content_container)
+        left_column.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+
+        # Right column - Log area (full height)
+        right_column = ttk.Frame(content_container)
+        right_column.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # IR Monitor frame (in left column)
+        monitor_frame = ttk.LabelFrame(left_column, text="IR Signal Monitor", padding="5")
+        monitor_frame.pack(fill=tk.X)
+
         # Enhanced Control Panel with centered layout
         control_panel = ttk.Frame(monitor_frame)
-        control_panel.pack(fill=tk.X, pady=(0, 15))
+        control_panel.pack(fill=tk.X, pady=(0, 5))
         
         # Center container for both control panels
         center_container = ttk.Frame(control_panel)
         center_container.pack(expand=True)
         
-        # IR Monitoring Controls (Left Section) - Larger size
-        monitor_controls = ttk.LabelFrame(center_container, text="📡 IR Monitoring", 
-                                        padding="15", style="Accent.TLabelframe")
-        monitor_controls.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 15))
-        
-        # Start/Stop in same row with larger buttons
-        listen_frame = ttk.Frame(monitor_controls)
+        # IR Monitoring Controls (Left Section) with colored background
+        monitor_controls_outer = tk.Frame(center_container, bg="#e8f4f8", relief=tk.RIDGE, bd=1)
+        monitor_controls_outer.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 15))
+
+        monitor_label = tk.Label(monitor_controls_outer, text="📡 IR Monitoring",
+                                font=('Arial', 10, 'bold'), bg="#e8f4f8", fg="#2c3e50")
+        monitor_label.pack(pady=(5, 5))
+
+        monitor_controls = tk.Frame(monitor_controls_outer, bg="#e8f4f8", padx=12, pady=8)
+        monitor_controls.pack(fill=tk.BOTH, expand=True)
+
+        # Start/Stop in same row with colored buttons
+        listen_frame = tk.Frame(monitor_controls, bg="#e8f4f8")
         listen_frame.pack(fill=tk.X, pady=5)
-        
-        self.start_btn = ttk.Button(listen_frame, text="🎧 Start Listening", 
-                                   command=self.start_listening, state=tk.DISABLED, 
-                                   width=18, style="Accent.TButton")
+
+        self.start_btn = ttk.Button(listen_frame, text="🎧 Start Listening",
+                                   command=self.start_listening, state=tk.DISABLED,
+                                   width=18, style="Success.TButton")
         self.start_btn.pack(side=tk.LEFT, padx=(0, 8))
-        
-        self.stop_btn = ttk.Button(listen_frame, text="⏹️ Stop Listening", 
-                                  command=self.stop_listening, state=tk.DISABLED, 
-                                  width=18, style="Accent.TButton")
+        self.create_tooltip(self.start_btn, "Start listening for IR signals (Ctrl+S)")
+
+        self.stop_btn = ttk.Button(listen_frame, text="⏹️ Stop Listening",
+                                  command=self.stop_listening, state=tk.DISABLED,
+                                  width=18, style="Danger.TButton")
         self.stop_btn.pack(side=tk.LEFT)
-        
-        # Clear log button below - larger
-        self.clear_btn = ttk.Button(monitor_controls, text="🗑️ Clear Log", 
-                                   command=self.clear_log, width=38)
+        self.create_tooltip(self.stop_btn, "Stop listening for IR signals (Ctrl+S)")
+
+        # Clear log button below
+        self.clear_btn = ttk.Button(monitor_controls, text="🗑️ Clear Log",
+                                   command=self.clear_log, width=38, style="Primary.TButton")
         self.clear_btn.pack(pady=(8, 0))
+        self.create_tooltip(self.clear_btn, "Clear the IR signal log (Ctrl+L)")
         
-        # QC Testing Controls (Right Section) - Larger size
-        test_controls = ttk.LabelFrame(center_container, text="🧪 Quality Control Testing", 
-                                     padding="15", style="Accent.TLabelframe")
-        test_controls.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(15, 0))
-        
-        # Test buttons in rows with larger buttons
-        test_frame1 = ttk.Frame(test_controls)
+        # QC Testing Controls (Right Section) with colored background
+        test_controls_outer = tk.Frame(center_container, bg="#e8f5e9", relief=tk.RIDGE, bd=1)
+        test_controls_outer.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(15, 0))
+
+        test_label = tk.Label(test_controls_outer, text="🧪 Quality Control Testing",
+                             font=('Arial', 10, 'bold'), bg="#e8f5e9", fg="#2c3e50")
+        test_label.pack(pady=(5, 5))
+
+        test_controls = tk.Frame(test_controls_outer, bg="#e8f5e9", padx=12, pady=8)
+        test_controls.pack(fill=tk.BOTH, expand=True)
+
+        # Test buttons in rows with colored buttons
+        test_frame1 = tk.Frame(test_controls, bg="#e8f5e9")
         test_frame1.pack(fill=tk.X, pady=5)
-        
-        self.test_mode_btn = ttk.Button(test_frame1, text="🚀 Start QC Test", 
-                                       command=self.start_test_mode, width=18)
+
+        self.test_mode_btn = ttk.Button(test_frame1, text="🚀 Start QC Test",
+                                       command=self.start_test_mode, width=18, style="Info.TButton")
         self.test_mode_btn.pack(side=tk.LEFT, padx=(0, 8))
-        
-        self.reset_test_btn = ttk.Button(test_frame1, text="🔄 Reset Test", 
+        self.create_tooltip(self.test_mode_btn, "Start Quality Control test mode (Ctrl+T)")
+
+        self.reset_test_btn = ttk.Button(test_frame1, text="🔄 Reset Test",
                                         command=self.reset_test_mode, state=tk.DISABLED, width=18)
         self.reset_test_btn.pack(side=tk.LEFT)
-        
-        # Export results button - larger
-        self.export_btn = ttk.Button(test_controls, text="📊 Export Results", 
-                                    command=self.export_test_results, state=tk.DISABLED, width=38)
+        self.create_tooltip(self.reset_test_btn, "Reset the current test and start over")
+
+        # Export results button
+        self.export_btn = ttk.Button(test_controls, text="📊 Export Results",
+                                    command=self.export_test_results, state=tk.DISABLED, width=38, style="Primary.TButton")
         self.export_btn.pack(pady=(8, 0))
-        
-        # Test Progress frame
-        self.test_frame = ttk.LabelFrame(monitor_frame, text="Remote QC Test Progress", padding="5")
-        # Initially hidden, will be shown when test mode starts
-        
+        self.create_tooltip(self.export_btn, "Export test results to a file")
+
         # Initialize test mode variables
         self.test_mode_active = False
         self.current_remote_type = None
         self.test_results = {}
         self.expected_buttons = {}
         self.setup_test_definitions()
-        
-        # Enhanced IR log with styling
-        log_frame = ttk.Frame(monitor_frame)
-        log_frame.pack(fill=tk.BOTH, expand=True)
-        
-        self.ir_text = tk.Text(log_frame, height=20, width=100, 
-                              bg="#1e1e1e", fg="#ffffff", 
-                              font=("Consolas", 10), 
-                              wrap=tk.WORD, padx=10, pady=10)
-        scrollbar = ttk.Scrollbar(log_frame, orient="vertical", command=self.ir_text.yview)
+
+        # Test Progress frame (in left column, below monitor controls)
+        self.test_frame = ttk.LabelFrame(left_column, text="📋 Remote QC Test Progress", padding="5")
+        # Will be shown when test mode starts
+
+        # Detected Remote section (in left column, below test progress) with colored background
+        remote_frame_outer = tk.Frame(left_column, bg="#fff3e0", relief=tk.RIDGE, bd=1)
+        remote_frame_outer.pack(fill=tk.X, pady=(10, 0))
+
+        remote_frame_label = tk.Label(remote_frame_outer, text="Detected Remote",
+                                      font=('Arial', 10, 'bold'), bg="#fff3e0", fg="#2c3e50")
+        remote_frame_label.pack(pady=(5, 5))
+
+        remote_frame = tk.Frame(remote_frame_outer, bg="#fff3e0", padx=5, pady=5)
+        remote_frame.pack(fill=tk.X)
+
+        # Create a frame to hold image and info side by side
+        remote_content_frame = tk.Frame(remote_frame, bg="#fff3e0")
+        remote_content_frame.pack(fill=tk.X, expand=True)
+
+        # Image display area
+        self.image_frame = ttk.Frame(remote_content_frame)
+        self.image_frame.pack(side=tk.LEFT, padx=(0, 10))
+
+        # Placeholder for remote image
+        self.remote_image_label = ttk.Label(self.image_frame, text="No Remote\nDetected",
+                                          background="lightgray", width=12, anchor="center",
+                                          font=("Arial", 8))
+        self.remote_image_label.pack(pady=2)
+
+        # Remote info area
+        remote_info_frame = ttk.Frame(remote_content_frame)
+        remote_info_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        ttk.Label(remote_info_frame, text="Remote Type:", font=("Arial", 9)).pack(anchor="w")
+        ttk.Label(remote_info_frame, textvariable=self.remote_type_var,
+                 font=("Arial", 9, "bold")).pack(anchor="w", padx=(10, 0))
+
+        ttk.Label(remote_info_frame, text="Last Button:", font=("Arial", 9)).pack(anchor="w", pady=(3, 0))
+        ttk.Label(remote_info_frame, textvariable=self.last_button_var,
+                 font=("Arial", 8)).pack(anchor="w", padx=(10, 0))
+
+        ttk.Label(remote_info_frame, text="Signals Received:", font=("Arial", 9)).pack(anchor="w", pady=(3, 0))
+        ttk.Label(remote_info_frame, textvariable=self.signal_count_var,
+                 font=("Arial", 8)).pack(anchor="w", padx=(10, 0))
+
+        # Enhanced IR log with styling - IN RIGHT COLUMN (full height) with shadow effect
+        log_outer_frame = tk.Frame(right_column, bg="#b0b0b0", relief=tk.FLAT, bd=0)
+        log_outer_frame.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+
+        log_container_frame = tk.Frame(log_outer_frame, bg="#d0d0d0")
+        log_container_frame.pack(fill=tk.BOTH, expand=True, padx=(0, 2), pady=(0, 2))
+
+        log_container = ttk.LabelFrame(log_container_frame, text="📄 IR Signal Log", padding="5")
+        log_container.pack(fill=tk.BOTH, expand=True)
+
+        self.log_frame = ttk.Frame(log_container)
+        self.log_frame.pack(fill=tk.BOTH, expand=True)
+
+        # IR log - PRIORITIZED with maximum visibility, full column height with enhanced border
+        self.ir_text = tk.Text(self.log_frame, width=70,
+                              bg="#1e1e1e", fg="#ffffff",
+                              font=("Consolas", 10),
+                              wrap=tk.WORD, padx=12, pady=12,
+                              relief=tk.SOLID, borderwidth=2,
+                              highlightthickness=1, highlightbackground="#3498db")
+        scrollbar = ttk.Scrollbar(self.log_frame, orient="vertical", command=self.ir_text.yview)
         self.ir_text.configure(yscrollcommand=scrollbar.set)
-        
+
         # Configure text tags for fancy formatting
         self.setup_text_styles()
-        
+
         self.ir_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # Status bar
+        # Status bar with color-coded indicators
+        status_frame = tk.Frame(main_frame, bg="#34495e", relief=tk.FLAT, height=30)
+        status_frame.pack(fill=tk.X, pady=(5, 0))
+
+        # Status indicator (connection status)
+        self.status_indicator = tk.Label(status_frame, text="●", font=("Arial", 12),
+                                        bg="#34495e", fg="#95a5a6", padx=5)
+        self.status_indicator.pack(side=tk.LEFT)
+
         self.status_var = tk.StringVar(value="Ready")
-        status_bar = ttk.Label(main_frame, textvariable=self.status_var, relief=tk.SUNKEN)
-        status_bar.pack(fill=tk.X, pady=(5, 0))
+        status_label = tk.Label(status_frame, textvariable=self.status_var,
+                               bg="#34495e", fg="white", font=("Arial", 9), anchor=tk.W)
+        status_label.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         
     def refresh_devices(self):
         """List all devices like main.py"""
-        devices = hid.enumerate(USB_VID)
+        # Try Raspberry Pi VID first, then fallback to Adafruit VID
+        devices = list(hid.enumerate(USB_VID_RASPBERRY_PI))
+        if not devices:
+            self.log_message("No devices found with Raspberry Pi VID, trying Adafruit VID...", "warning")
+            devices = list(hid.enumerate(USB_VID_ADAFRUIT))
+            if devices:
+                # Update USB_VID to use Adafruit for this session
+                global USB_VID
+                USB_VID = USB_VID_ADAFRUIT
+                self.log_message(f"Found device with Adafruit VID (0x{USB_VID_ADAFRUIT:04x})", "success")
+
         device_list = []
         for device in devices:
-            name = f"{device.get('manufacturer_string', 'Unknown')} - {device.get('product_string', 'Unknown')} (PID: 0x{device['product_id']:04x})"
+            name = f"{device.get('manufacturer_string', 'Unknown')} - {device.get('product_string', 'Unknown')} (VID: 0x{device['vendor_id']:04x}, PID: 0x{device['product_id']:04x})"
             device_list.append(name)
-        
+
         self.device_combo['values'] = device_list
         if device_list:
             self.device_combo.current(0)
@@ -271,7 +392,7 @@ class VIRCCompleteGUI:
         else:
             self.device_combo.set('')
             self.status_var.set("No devices found")
-        
+
         # Also log all devices like main.py
         self.log_message("All HID devices:")
         for device in hid.enumerate():
@@ -305,8 +426,9 @@ class VIRCCompleteGUI:
             self.device_info['manufacturer'].set(devices[selected_index]['manufacturer_string'] or 'Unknown')
             self.device_info['product'].set(devices[selected_index]['product_string'] or 'Unknown')
             self.device_info['serial'].set(devices[selected_index]['serial_number'] or 'N/A')
-            
+
             self.status_var.set("Connected")
+            self.status_indicator.config(fg="#27ae60")  # Green indicator
             
         except Exception as e:
             messagebox.showerror("Connection Error", str(e))
@@ -341,11 +463,12 @@ class VIRCCompleteGUI:
             self.device_info['manufacturer'].set(devices[selected_index]['manufacturer_string'] or 'Unknown')
             self.device_info['product'].set(devices[selected_index]['product_string'] or 'Unknown')
             self.device_info['serial'].set(devices[selected_index]['serial_number'] or 'N/A')
-            
+
             self.status_var.set("Auto-connected")
-            
-            # Automatically get device info
-            self.get_device_info()
+            self.status_indicator.config(fg="#27ae60")  # Green indicator
+
+            # Automatically get device info (with small delay to ensure device is ready)
+            self.root.after(500, self.get_device_info)
             
         except Exception as e:
             self.log_message(f"Auto-connection failed: {e}")
@@ -357,8 +480,9 @@ class VIRCCompleteGUI:
             self.stop_listening()
             self.device.close()
             self.device = None
-            
+
             # Update UI
+            self.status_indicator.config(fg="#95a5a6")  # Gray indicator
             self.disconnect_btn.config(state=tk.DISABLED)
             self.get_info_btn.config(state=tk.DISABLED)
             self.start_btn.config(state=tk.DISABLED)
@@ -419,6 +543,11 @@ class VIRCCompleteGUI:
     def stop_listening(self):
         """Stop listening for IR signals"""
         self.is_listening = False
+
+        # Wait a moment for thread to finish reading
+        if self.listen_thread and self.listen_thread.is_alive():
+            self.listen_thread.join(timeout=0.5)
+
         self.start_btn.config(state=tk.NORMAL)
         self.stop_btn.config(state=tk.DISABLED)
         self.status_var.set("Stopped listening")
@@ -428,34 +557,52 @@ class VIRCCompleteGUI:
         """Listen for IR signals like main.py"""
         while self.is_listening and self.device:
             try:
-                response = self.device.read(64, 100)
+                # Check if still listening before reading (prevents error on stop)
+                if not self.is_listening:
+                    break
+
+                try:
+                    response = self.device.read(64, 100)
+                except OSError as e:
+                    # Device was closed while reading (happens on stop)
+                    if not self.is_listening:
+                        break  # Expected, just exit quietly
+                    raise  # Unexpected, re-raise
+
                 if response and response[0] == 7:
                     ir_code = 0
                     for i in range(4):
                         ir_code |= response[2+i] << (8*i)
-                    
+
+                    # Debouncing: Ignore duplicate IR codes within debounce_delay
+                    current_time = time.time()
+                    if ir_code == self.last_ir_code and (current_time - self.last_ir_time) < self.debounce_delay:
+                        continue  # Skip duplicate signal
+
+                    self.last_ir_code = ir_code
+                    self.last_ir_time = current_time
+
                     name = self.code_map.get(ir_code, "Unknown Button")
                     remote_type = self.detect_remote_type(ir_code)
-                    
+
                     # Update remote display
                     self.update_remote_display(remote_type, name)
-                    
+
                     timestamp = datetime.now().strftime("%H:%M:%S")
-                    
+
                     self.log_message(f"\n[{timestamp}] Received IR signal:", "ir_signal")
                     self.log_message(f"Raw bytes: {[hex(x) for x in response[:6]]}")
                     self.log_message(f"IR Code: 0x{ir_code:08X} : {name}", "ir_signal")
                     self.log_message(f"Detected remote type: {remote_type}", "test")
                     self.log_message("-" * 50)
-                    
+
             except Exception as e:
-                self.log_message(f"HID error: {e}")
-                self.log_message("Device may have been disconnected. Attempting to reconnect...")
-                self.handle_reconnection()
+                # Only log error if we're still supposed to be listening
+                if self.is_listening:
+                    self.log_message(f"HID error: {e}", "error")
+                    self.log_message("Device may have been disconnected. Attempting to reconnect...")
+                    self.handle_reconnection()
                 break
-            except Exception as e:
-                self.log_message(f"Unexpected error: {e}")
-                time.sleep(1)
                 
     def detect_remote_type(self, ir_code):
         """Detect remote type like main.py"""
@@ -468,9 +615,15 @@ class VIRCCompleteGUI:
             
     def handle_reconnection(self):
         """Handle reconnection like main.py"""
+        was_listening = self.is_listening
+        self.is_listening = False  # Stop current listening
+
         if self.device:
-            self.device.close()
-            
+            try:
+                self.device.close()
+            except:
+                pass
+
         for attempt in range(10):
             time.sleep(1)
             devices = list(hid.enumerate(USB_VID))
@@ -478,14 +631,22 @@ class VIRCCompleteGUI:
                 try:
                     self.device = hid.device()
                     self.device.open(USB_VID, devices[0]['product_id'])
-                    self.log_message("Reconnected to device.")
+                    self.log_message("Reconnected to device.", "success")
+
+                    # Restart listening if we were listening before
+                    if was_listening:
+                        self.is_listening = True
+                        self.listen_thread = threading.Thread(target=self.listen_for_ir, daemon=True)
+                        self.listen_thread.start()
+                        self.log_message("Resumed listening for IR signals", "success")
+
                     return
                 except Exception as reconnect_ex:
-                    self.log_message(f"Reconnect attempt {attempt+1} failed: {reconnect_ex}")
+                    self.log_message(f"Reconnect attempt {attempt+1} failed: {reconnect_ex}", "warning")
             else:
-                self.log_message(f"Reconnect attempt {attempt+1}: Device not found.")
-        
-        self.log_message("Failed to reconnect after multiple attempts.")
+                self.log_message(f"Reconnect attempt {attempt+1}: Device not found.", "warning")
+
+        self.log_message("Failed to reconnect after multiple attempts.", "error")
         self.stop_listening()
         
     def clear_log(self):
@@ -552,6 +713,11 @@ class VIRCCompleteGUI:
         # Insert message with appropriate style
         self.ir_text.insert(tk.END, f"{message}\n", style)
         self.ir_text.see(tk.END)
+
+        # Performance: Limit log size to prevent slowdown
+        line_count = int(self.ir_text.index('end-1c').split('.')[0])
+        if line_count > 500:
+            self.ir_text.delete(1.0, "100.0")  # Delete first 100 lines
     
     def load_remote_image(self, image_path, size=(100, 160)):
         """Load and resize remote image"""
@@ -670,7 +836,7 @@ class VIRCCompleteGUI:
         self.reset_test_btn.config(state=tk.NORMAL)
         self.export_btn.config(state=tk.DISABLED)
         
-        # Show test frame
+        # Show test frame (in LEFT column, below monitor controls)
         self.test_frame.pack(fill=tk.X, pady=(10, 0))
         self.setup_test_ui()
         
@@ -691,56 +857,62 @@ class VIRCCompleteGUI:
         # Clear any existing content
         for widget in self.test_frame.winfo_children():
             widget.destroy()
-        
-        # Instructions label
-        instructions = ttk.Label(self.test_frame, text="🎯 Press each button on your remote to test. Test will auto-detect remote type.", 
-                               font=("Arial", 10, "bold"))
-        instructions.pack(pady=(0, 10))
-        
-        # Create frame for test progress
+
+        # Instructions label - compact
+        instructions = ttk.Label(self.test_frame,
+                               text="🎯 Press each button on your remote to test. Test will auto-detect remote type.",
+                               font=("Arial", 8, "bold"),
+                               wraplength=600)
+        instructions.pack(pady=(2, 5))
+
+        # Create frame for test progress - compact
         self.progress_frame = ttk.Frame(self.test_frame)
-        self.progress_frame.pack(fill=tk.X)
-        
+        self.progress_frame.pack(fill=tk.X, padx=5, pady=3)
+
         # Test status labels will be created when remote type is detected
         self.button_status_labels = {}
-        
-        # Overall progress
-        self.progress_label = ttk.Label(self.test_frame, text="🟡 Waiting for first button press to detect remote type...", 
-                                      font=("Arial", 10))
-        self.progress_label.pack(pady=(10, 0))
+
+        # Overall progress - compact
+        self.progress_label = ttk.Label(self.test_frame,
+                                      text="🟡 Waiting for first button press to detect remote type...",
+                                      font=("Arial", 8, "bold"))
+        self.progress_label.pack(pady=(5, 2))
     
     def create_button_checklist(self, remote_type):
         """Create checklist for detected remote type"""
         # Clear existing checklist
         for widget in self.progress_frame.winfo_children():
             widget.destroy()
-        
+
         self.button_status_labels = {}
         expected_buttons = self.expected_buttons.get(remote_type, {})
-        
-        # Create two columns
+
+        # Create two columns for button checklist - compact
         left_frame = ttk.Frame(self.progress_frame)
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
-        
-        right_frame = ttk.Frame(self.progress_frame) 
+
+        right_frame = ttk.Frame(self.progress_frame)
         right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(10, 0))
-        
+
         # Split buttons into two columns
         button_list = list(expected_buttons.items())
         mid_point = len(button_list) // 2
-        
+
         for i, (code, name) in enumerate(button_list):
             target_frame = left_frame if i < mid_point else right_frame
-            
+
+            # Individual button row - compact
             frame = ttk.Frame(target_frame)
-            frame.pack(fill=tk.X, pady=2)
-            
-            status_label = ttk.Label(frame, text="⏳", font=("Arial", 12))
-            status_label.pack(side=tk.LEFT, padx=(0, 5))
-            
-            name_label = ttk.Label(frame, text=name, font=("Arial", 10))
+            frame.pack(fill=tk.X, pady=1)
+
+            # Status icon - smaller
+            status_label = ttk.Label(frame, text="⏳", font=("Arial", 9))
+            status_label.pack(side=tk.LEFT, padx=(0, 6))
+
+            # Button name - smaller
+            name_label = ttk.Label(frame, text=name, font=("Arial", 9))
             name_label.pack(side=tk.LEFT)
-            
+
             self.button_status_labels[code] = status_label
             self.test_results[code] = "pending"
     
@@ -790,14 +962,14 @@ class VIRCCompleteGUI:
         passed_count = sum(1 for status in self.test_results.values() if status == "pass")
         
         progress_text = f"📊 Progress: {passed_count}/{total_count} buttons tested"
-        
+
         if pending_count == 0:
             # All tests complete!
             progress_text += " - 🎉 ALL TESTS COMPLETE!"
-            self.progress_label.config(text=progress_text, foreground="green")
+            self.progress_label.config(text=progress_text, foreground="green", font=("Arial", 9, "bold"))
             self.show_test_results()
         else:
-            self.progress_label.config(text=progress_text, foreground="blue")
+            self.progress_label.config(text=progress_text, foreground="blue", font=("Arial", 8, "bold"))
     
     def show_test_results(self):
         """Show final test results"""

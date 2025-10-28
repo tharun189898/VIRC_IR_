@@ -26,7 +26,7 @@ REM Check if required packages are installed
 python -c "import hid" >nul 2>&1
 if errorlevel 1 (
     echo Installing required packages...
-    pip install hidapi==0.14.0
+    pip install -r requirements.txt
     if errorlevel 1 (
         echo ERROR: Failed to install required packages
         echo.
@@ -38,8 +38,8 @@ if errorlevel 1 (
 REM Check if Pillow is installed for image support
 python -c "import PIL" >nul 2>&1
 if errorlevel 1 (
-    echo Installing image support...
-    pip install Pillow
+    echo Installing required packages...
+    pip install -r requirements.txt
 )
 
 REM Launch the GUI

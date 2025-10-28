@@ -24,8 +24,8 @@ uint8_t const desc_hid_report[] =
 };
 
 // Before the HID object declaration, add:
-#define USB_VID 0x239a  // Adafruit VID
-#define USB_PID 0xcafe  // Default PID
+#define USB_VID 0x2e8a  // Raspberry Pi VID
+#define USB_PID 0x000a  // Raspberry Pi Pico PID
 
 // USB HID object
 Adafruit_USBD_HID usb_hid(desc_hid_report, sizeof(desc_hid_report), HID_ITF_PROTOCOL_NONE, 2, true);
@@ -123,18 +123,6 @@ void set_report_callback(uint8_t report_id, hid_report_type_t report_type, uint8
     default:
       out_buffer[0] = 0;
       out_buffer[2] = 3;
-      usb_hid.sendReport(0, out_buffer, 3); 
-  }
-}
-    case 5: //Host asking for firmware version
-      out_buffer[0] = 6;
-      out_buffer[2] = FW_VERSION_MAJOR;
-      out_buffer[3] = FW_VERSION_MINOR;
-      usb_hid.sendReport(0, out_buffer, 4);
-      break;
-    default:
-      out_buffer[0] = 0;
-      out_buffer[2] = 3;
-      usb_hid.sendReport(0, out_buffer, 3); 
+      usb_hid.sendReport(0, out_buffer, 3);
   }
 }

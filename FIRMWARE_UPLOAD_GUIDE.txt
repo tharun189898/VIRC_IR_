@@ -1,0 +1,247 @@
+================================================================================
+                    VIRC FIRMWARE UPLOAD GUIDE
+           Raspberry Pi Pico - IR Controller Firmware
+================================================================================
+
+This guide explains how to upload the VIRC firmware to your Raspberry Pi Pico
+board using the Arduino IDE.
+
+================================================================================
+PREREQUISITES
+================================================================================
+
+Before you begin, ensure you have:
+  ✓ Raspberry Pi Pico board
+  ✓ USB cable (micro-USB or USB-C depending on your Pico model)
+  ✓ Arduino IDE installed (version 1.8.13 or newer, or Arduino IDE 2.x)
+  ✓ Windows/Mac/Linux computer
+
+
+================================================================================
+STEP 1: INSTALL ARDUINO IDE
+================================================================================
+
+If you don't have Arduino IDE installed:
+
+1. Download from: https://www.arduino.cc/en/software
+2. Install the application
+3. Launch Arduino IDE
+
+
+================================================================================
+STEP 2: ADD RASPBERRY PI PICO BOARD SUPPORT
+================================================================================
+
+A. Add Board Manager URL:
+   1. Open Arduino IDE
+   2. Go to: File → Preferences
+   3. In "Additional Board Manager URLs" field, add:
+      https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+   4. Click OK
+
+B. Install Pico Board Package:
+   1. Go to: Tools → Board → Boards Manager
+   2. Search for: "pico"
+   3. Find: "Raspberry Pi Pico/RP2040" by Earle F. Philhower, III
+   4. Click "Install"
+   5. Wait for installation to complete
+
+
+================================================================================
+STEP 3: INSTALL REQUIRED LIBRARIES
+================================================================================
+
+The VIRC firmware requires these libraries:
+
+1. Adafruit TinyUSB Library:
+   - Go to: Sketch → Include Library → Manage Libraries
+   - Search: "Adafruit TinyUSB"
+   - Install: "Adafruit TinyUSB Library" (version 1.7.0 or newer)
+
+2. IRremote Library:
+   - In Library Manager, search: "IRremote"
+   - Install: "IRremote" by shirriff, z3t0, ArminJo (version 3.x or newer)
+
+
+================================================================================
+STEP 4: OPEN THE FIRMWARE PROJECT
+================================================================================
+
+1. In Arduino IDE, go to: File → Open
+2. Navigate to the VIRC project folder
+3. Open: virc_firmware/virc_firmware.ino
+4. The project should open with multiple tabs:
+   - virc_firmware.ino (main file)
+   - PinDefinitionsAndMore.h
+   - Any other project files
+
+
+================================================================================
+STEP 5: PUT PICO IN BOOTLOADER MODE
+================================================================================
+
+IMPORTANT: You must put the Pico in bootloader mode to upload firmware.
+
+Steps:
+1. UNPLUG the Raspberry Pi Pico from USB completely
+2. LOCATE the white BOOTSEL button on the Pico board
+3. PRESS AND HOLD the BOOTSEL button
+4. While still holding the button, PLUG the USB cable into your computer
+5. Continue holding for 2 seconds
+6. RELEASE the button
+
+The Pico should now appear as a USB drive named "RPI-RP2" on your computer.
+
+
+================================================================================
+STEP 6: CONFIGURE ARDUINO IDE SETTINGS
+================================================================================
+
+CRITICAL: These settings must be configured correctly!
+
+1. Tools → Board → Raspberry Pi RP2040 Boards → "Raspberry Pi Pico"
+
+2. Tools → USB Stack → "Adafruit TinyUSB"
+   ⚠️ IMPORTANT: Must select TinyUSB, NOT "Pico SDK"!
+
+3. Tools → Port → Select the COM port showing "Raspberry Pi Pico"
+   - Windows: Usually shows as "COMx (Raspberry Pi Pico)"
+   - Mac: Usually /dev/cu.usbmodemXXXX
+   - Linux: Usually /dev/ttyACMx
+
+4. Optional settings (leave as default):
+   - Flash Size: 2MB (Sketch: ~1MB, FS: ~1MB)
+   - CPU Speed: 125 MHz
+   - Optimize: Small (-Os)
+
+
+================================================================================
+STEP 7: COMPILE AND UPLOAD FIRMWARE
+================================================================================
+
+1. Click the "Verify" button (✓ checkmark icon) to compile
+   - Wait for compilation to complete
+   - Check for any errors in the output window
+
+2. If compilation succeeds, click "Upload" button (→ arrow icon)
+   - The firmware will be uploaded to the Pico
+   - You'll see upload progress in the output window
+
+3. Wait for "Done uploading" message
+
+4. The Pico will automatically restart and run the new firmware
+
+
+================================================================================
+STEP 8: VERIFY FIRMWARE IS RUNNING
+================================================================================
+
+After upload completes:
+
+1. The Pico should restart automatically
+2. Open the VIRC QC Testing Station GUI application
+3. Click "Connect to VIRC"
+4. You should see device information populate:
+   - Device: VIRC IR Controller
+   - Manufacturer: VIRC Systems
+   - Version: (firmware version)
+
+If connection fails:
+  - Unplug and replug the Pico USB cable
+  - Try a different USB port
+  - Restart the GUI application
+
+
+================================================================================
+TROUBLESHOOTING
+================================================================================
+
+Problem: "Port not found" or "Upload failed"
+Solution:
+  → Make sure you put Pico in bootloader mode (Step 5)
+  → Try a different USB cable (some cables are power-only)
+  → Try a different USB port on your computer
+
+Problem: "TinyUSB not found" compilation error
+Solution:
+  → Verify you selected "Adafruit TinyUSB" in Tools → USB Stack
+  → Reinstall Adafruit TinyUSB library from Library Manager
+
+Problem: "IRremote.h not found" compilation error
+Solution:
+  → Install IRremote library from Library Manager (Step 3)
+
+Problem: GUI cannot detect VIRC device after upload
+Solution:
+  → Unplug Pico, wait 5 seconds, plug back in
+  → Check Device Manager (Windows) to see if device is recognized
+  → Try uploading firmware again
+
+Problem: Pico not appearing as USB drive in bootloader mode
+Solution:
+  → Make sure you're holding BOOTSEL button BEFORE plugging in USB
+  → Try different USB cable
+  → Try different USB port
+  → Some USB hubs don't work - try direct computer connection
+
+
+================================================================================
+FIRMWARE UPDATE PROCESS
+================================================================================
+
+To update firmware on an already-programmed Pico:
+
+1. Close VIRC QC Testing Station application if running
+2. Put Pico in bootloader mode (Step 5)
+3. Upload new firmware (Steps 6-7)
+4. Restart VIRC QC Testing Station application
+5. Connect and verify new version
+
+
+================================================================================
+ADDITIONAL NOTES
+================================================================================
+
+- You only need to upload firmware ONCE per Pico board
+- Firmware stays on the Pico even after unplugging power
+- To update firmware, follow this guide again with new .ino file
+- Always use "Adafruit TinyUSB" USB stack - the Pico SDK stack will NOT work
+  with the VIRC GUI application
+- The firmware source code is in: virc_firmware/virc_firmware.ino
+
+
+================================================================================
+FOR DEVELOPERS
+================================================================================
+
+To modify the firmware:
+
+1. Edit virc_firmware.ino and related files
+2. Test changes by uploading to Pico
+3. Verify functionality with GUI application
+4. Document any changes to IR protocols or HID commands
+
+HID Communication:
+- The Pico uses USB HID for communication with the GUI
+- Vendor ID: 0x239A (Adafruit)
+- Product ID: 0x8029 (HID Generic)
+- Report size: 64 bytes
+
+
+================================================================================
+SUPPORT
+================================================================================
+
+For issues with:
+- Firmware upload → Check Arduino IDE serial monitor for error messages
+- Device detection → See README.md troubleshooting section
+- IR functionality → Test with known-good remote first
+
+For technical support, refer to:
+- README.md (developer documentation)
+- QC_TESTING_USER_MANUAL.txt (GUI usage guide)
+
+
+================================================================================
+                              END OF GUIDE
+================================================================================

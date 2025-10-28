@@ -49,23 +49,14 @@ echo ==========================================
 echo Step 2: Installing Required Packages...
 echo ==========================================
 
-echo Installing HID support for VIRC device...
-pip install hidapi==0.14.0
+echo Installing required packages from requirements.txt...
+pip install -r requirements.txt
 if errorlevel 1 (
-    echo ✗ Failed to install HID support
+    echo ✗ Failed to install required packages
     pause
     exit /b 1
 )
-echo ✓ HID support installed
-
-echo Installing image support...
-pip install Pillow
-if errorlevel 1 (
-    echo ✗ Failed to install image support
-    pause
-    exit /b 1
-)
-echo ✓ Image support installed
+echo ✓ All required packages installed successfully
 
 echo.
 echo =======================================
@@ -100,7 +91,7 @@ echo   • Double-click "VIRC QC Testing Station" on your Desktop
 echo   OR
 echo   • Double-click "Launch_VIRC_QC_Station.bat" in this folder
 echo.
-echo For help, read "USER_GUIDE.md"
+echo For help, read "QC_TESTING_USER_MANUAL.txt"
 echo.
 echo Press any key to finish...
 pause >nul 

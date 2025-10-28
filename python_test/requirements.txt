@@ -1,0 +1,10 @@
+# VIRC Python Requirements
+# HID library for USB communication with VIRC device
+hidapi==0.14.0
+
+# Pillow for image display in GUI (remote images)
+pillow>=10.0.0
+
+# Note: tkinter is included with Python standard library
+# PyInstaller for creating standalone executables (development only)
+# pyinstaller>=5.0.0

@@ -2,9 +2,9 @@ import hid  # Changed back from hidapi
 import sys
 import time
 
-# Adafruit VID (0x239a)
-USB_VID = 0x239a
-USB_PID = 0xcafe  # Add PID constant
+# Raspberry Pi VID (0x2e8a)
+USB_VID = 0x2e8a
+USB_PID = 0x000a  # Raspberry Pi Pico PID
 
 def list_all_devices():
     print("\nAll HID devices:")
@@ -57,6 +57,7 @@ def main():
         print("1. Device is connected")
         print("2. Firmware is uploaded correctly")
         print("3. Device appears in Device Manager")
+        print("4. If using Raspberry Pi Pico, make sure it's in normal mode (not bootloader)")
         sys.exit(1)
 
     print(f"Found {len(devices)} device(s):")

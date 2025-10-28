@@ -1,0 +1,117 @@
+===============================================
+VIRC PROJECT - CHANGELOG
+===============================================
+
+Version 1.1 - 2025-10-28
+========================
+
+CRITICAL FIXES:
+---------------
+1. Fixed duplicate code in virc_firmware/virc_firmware.ino
+   - Removed lines 129-140 which were exact duplicates of lines 117-128
+   - This was causing compilation errors
+   - Firmware now compiles successfully
+
+2. Fixed USB VID mismatch in complete_gui.py
+   - Changed from Adafruit VID (0x239a) to Raspberry Pi VID (0x2e8a)
+   - Added fallback support for both VIDs
+   - Auto-detects which VID the device is using
+   - Improved device detection and compatibility
+
+IMPROVEMENTS:
+-------------
+3. Enhanced complete_gui.py device enumeration
+   - Now shows both VID and PID in device list
+   - Better error messages when device not found
+   - Automatic fallback to Adafruit VID if needed
+
+4. Updated requirements.txt
+   - Added comments explaining each package
+   - Specified minimum versions
+   - Added note about PyInstaller for deployment
+
+NEW DOCUMENTATION:
+------------------
+5. Created FIRMWARE_UPLOAD_GUIDE.txt
+   - Complete step-by-step Arduino IDE setup
+   - Detailed firmware upload instructions
+   - Troubleshooting section for common issues
+
+6. Created QC_TESTING_USER_MANUAL.txt
+   - Comprehensive user manual for QC team
+   - Daily workflow procedures
+   - Detailed troubleshooting guide
+   - Best practices section
+
+7. Created QUICK_START_GUIDE.txt
+   - One-page quick reference
+   - Essential steps only
+   - Easy to print and post at workstation
+
+8. Created DEPLOYMENT_README.txt
+   - Overview of deployment package
+   - Quick start instructions
+   - System requirements
+
+9. Created this CHANGELOG.txt
+   - Track all changes and improvements
+   - Version history
+
+TECHNICAL DETAILS:
+------------------
+
+Firmware Changes:
+- File: virc_firmware/virc_firmware.ino
+- Lines removed: 129-140 (duplicate code)
+- No functional changes, only bug fix
+- Firmware version remains: 1.1
+
+GUI Changes:
+- File: python_test/complete_gui.py
+- Lines modified: 16-20 (USB VID constants)
+- Lines modified: 260-292 (refresh_devices method)
+- Added dual VID support (Raspberry Pi + Adafruit)
+- Backward compatible with existing devices
+
+Python Dependencies:
+- hidapi: 0.14.0 (unchanged)
+- pillow: >=10.0.0 (now documented in requirements.txt)
+
+TESTING RECOMMENDATIONS:
+------------------------
+Before deployment:
+□ Upload fixed firmware to test device
+□ Verify device appears with correct VID (0x2e8a)
+□ Test GUI application connection
+□ Test CLI application (main.py)
+□ Test all 6 buttons on both remote types
+□ Verify export results functionality
+□ Test on clean machine (no dev environment)
+
+KNOWN ISSUES:
+-------------
+None currently.
+
+FUTURE ENHANCEMENTS (Suggested):
+--------------------------------
+- Create standalone .exe with PyInstaller
+- Add support for additional remote types
+- Add test history database
+- Add batch testing mode
+- Add statistics dashboard
+- Add remote control profile management
+
+===============================================
+Previous Version History
+===============================================
+
+Version 1.0 - Initial Release
+==============================
+- Basic firmware for IR reception
+- Python CLI test script (main.py)
+- Python GUI application (complete_gui.py)
+- Support for White and Black remotes
+- QC test mode with checklist
+- Export results to text file
+
+===============================================

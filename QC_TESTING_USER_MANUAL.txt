@@ -1,0 +1,320 @@
+===============================================
+VIRC QC TESTING STATION - USER MANUAL
+For Quality Control Team
+===============================================
+
+OVERVIEW:
+---------
+This application tests IR remote controls to ensure all buttons
+are functioning correctly. It automatically detects remote type
+and provides pass/fail results.
+
+SYSTEM REQUIREMENTS:
+--------------------
+- Windows 10 or higher
+- Python 3.8+ installed
+- VIRC device (Raspberry Pi Pico with IR receiver)
+- USB port
+- IR remote controls to test
+
+===============================================
+INSTALLATION
+===============================================
+
+ONE-TIME SETUP:
+
+1. Install Python Dependencies
+   -----------------------------
+   a) Open Command Prompt
+   b) Navigate to folder:
+      cd C:\[path-to-virc]\python_test
+
+   c) Install required packages:
+      pip install -r requirements.txt
+
+   d) Wait for installation to complete
+
+2. Upload Firmware to VIRC Device
+   -------------------------------
+   See: FIRMWARE_UPLOAD_GUIDE.txt
+   (This is done ONCE per device)
+
+===============================================
+RUNNING THE APPLICATION
+===============================================
+
+METHOD 1: GUI Application (Recommended)
+----------------------------------------
+1. Open Command Prompt
+2. Navigate to: cd C:\[path-to-virc]\python_test
+3. Run: python complete_gui.py
+4. GUI window will open
+
+METHOD 2: Command Line Interface
+---------------------------------
+1. Open Command Prompt
+2. Navigate to: cd C:\[path-to-virc]\python_test
+3. Run: python main.py
+4. Follow on-screen instructions
+
+===============================================
+USING THE GUI APPLICATION
+===============================================
+
+MAIN INTERFACE SECTIONS:
+------------------------
+
+┌─────────────────────────────────────────┐
+│ 1. DEVICE MANAGEMENT                    │
+│    - Shows connected devices            │
+│    - Auto-connects on startup           │
+│    - Refresh/Disconnect buttons         │
+├─────────────────────────────────────────┤
+│ 2. DEVICE INFORMATION                   │
+│    - Manufacturer, Product info         │
+│    - API Version, Firmware Version      │
+├─────────────────────────────────────────┤
+│ 3. DETECTED REMOTE                      │
+│    - Remote type (White/Black)          │
+│    - Last button pressed                │
+│    - Signal count                       │
+├─────────────────────────────────────────┤
+│ 4. CONTROL BUTTONS                      │
+│    - Start/Stop Listening               │
+│    - Start QC Test                      │
+│    - Clear Log                          │
+│    - Export Results                     │
+├─────────────────────────────────────────┤
+│ 5. IR SIGNAL MONITOR (Log Window)      │
+│    - Shows all IR signals received      │
+│    - Color-coded messages               │
+│    - Timestamps                         │
+└─────────────────────────────────────────┘
+
+===============================================
+QUALITY CONTROL TESTING PROCEDURE
+===============================================
+
+STEP-BY-STEP INSTRUCTIONS:
+
+1. PREPARE HARDWARE
+   ----------------
+   ✓ Connect VIRC device via USB
+   ✓ Wait for "Auto-connected" status
+   ✓ Have remote control ready
+   ✓ Position remote 6-12 inches from IR receiver
+
+2. START QC TEST
+   -------------
+   ✓ Click "Start QC Test" button
+   ✓ Test checklist will appear
+   ✓ All buttons show ⏳ (pending)
+
+3. TEST EACH BUTTON
+   ----------------
+   ✓ Point remote at VIRC receiver
+   ✓ Press FIRST button on remote
+   ✓ System auto-detects remote type (White/Black)
+   ✓ Checklist updates to show expected buttons
+
+   ✓ Press each button listed:
+      - Short Pause
+      - Long Pause
+      - Bed Mode
+      - Chair Mode
+      - Square Button
+      - Triangle Button
+
+   ✓ Each successful press shows ✅ (PASS)
+   ✓ Progress counter updates (e.g., "3/6 buttons tested")
+
+4. REVIEW RESULTS
+   --------------
+   ✓ When all buttons tested: "🎉 ALL TESTS COMPLETE!"
+   ✓ Popup shows PASS or FAIL result
+   ✓ Log shows detailed results
+
+5. EXPORT RESULTS
+   --------------
+   ✓ Click "Export Results" button
+   ✓ File saved: QC_Test_Results_[timestamp].txt
+   ✓ Location shown in popup message
+   ✓ File contains:
+      - Test date/time
+      - Remote type
+      - Pass/fail for each button
+      - Overall result
+
+6. TEST NEXT REMOTE
+   ----------------
+   ✓ Click "Reset Test"
+   ✓ Repeat from Step 2
+
+===============================================
+UNDERSTANDING THE LOG COLORS
+===============================================
+
+🟢 GREEN   = Success messages (button passed)
+🟡 YELLOW  = Instructions and info
+🔵 BLUE    = Test mode messages
+🟣 PURPLE  = IR signal data
+🟠 ORANGE  = Warnings
+🔴 RED     = Errors or failures
+
+===============================================
+SUPPORTED REMOTE TYPES
+===============================================
+
+WHITE REMOTE (Scanmode 1):
+--------------------------
+IR Codes ending in: 0x7F80
+Expected Codes:
+- Short Pause:    0xFE017F80
+- Long Pause:     0xFC037F80
+- Bed Mode:       0xFB047F80
+- Chair Mode:     0xF9067F80
+- Square Button:  0xF8077F80
+- Triangle Button: 0xF6097F80
+
+BLACK REMOTE (Scanmode 2):
+--------------------------
+IR Codes ending in: 0xFF00
+Expected Codes:
+- Short Pause:    0xFE01FF00
+- Long Pause:     0xFC03FF00
+- Bed Mode:       0xFB04FF00
+- Chair Mode:     0xF906FF00
+- Square Button:  0xF807FF00
+- Triangle Button: 0xF609FF00
+
+===============================================
+TROUBLESHOOTING
+===============================================
+
+PROBLEM: Device Not Found
+--------------------------
+Symptoms: "No devices found" message
+Solutions:
+□ Check USB cable is connected
+□ Verify firmware is uploaded (see FIRMWARE_UPLOAD_GUIDE.txt)
+□ Check Device Manager for "VIRC Controller"
+□ Try different USB port
+□ Unplug and replug device
+□ Click "Refresh Devices" button
+
+PROBLEM: No IR Signals Detected
+--------------------------------
+Symptoms: No codes appear when pressing remote buttons
+Solutions:
+□ Click "Start Listening" button
+□ Point remote DIRECTLY at IR receiver
+□ Move closer (6-12 inches away)
+□ Check remote batteries
+□ Try different buttons
+□ Verify IR receiver LED blinks when pressing buttons
+
+PROBLEM: Wrong Button Detected
+-------------------------------
+Symptoms: Button shows as different name than expected
+Solutions:
+□ This is normal - button mappings may vary
+□ If button registers, it's working correctly
+□ Different remotes may have different codes
+
+PROBLEM: Test Doesn't Start
+----------------------------
+Symptoms: "Start QC Test" does nothing
+Solutions:
+□ Make sure device is connected first
+□ Check "Device Information" shows valid data
+□ Click "Get Device Info" to refresh
+□ Restart application
+
+PROBLEM: Application Freezes
+-----------------------------
+Solutions:
+□ Close and restart application
+□ Check if device is still connected
+□ Unplug and replug VIRC device
+□ Restart computer if persistent
+
+PROBLEM: Can't Export Results
+------------------------------
+Symptoms: Export button disabled or fails
+Solutions:
+□ Complete a full test first
+□ Ensure write permissions in folder
+□ Close any open result files
+□ Check disk space
+
+===============================================
+BEST PRACTICES
+===============================================
+
+✓ Test in a well-lit room (no direct sunlight on IR receiver)
+✓ Point remote directly at receiver (not at angles)
+✓ Keep distance: 6-12 inches optimal
+✓ Press buttons firmly and briefly (don't hold)
+✓ Wait 0.5 seconds between button presses
+✓ Export results after each remote test
+✓ Keep VIRC device connected during all tests
+✓ Use fresh batteries in remotes being tested
+
+===============================================
+DAILY WORKFLOW
+===============================================
+
+MORNING STARTUP:
+1. Connect VIRC device to computer
+2. Launch GUI application
+3. Verify "Auto-connected" message
+4. Click "Get Device Info" to confirm device ready
+
+TESTING REMOTES:
+For each remote:
+1. Click "Start QC Test"
+2. Press all 6 buttons
+3. Verify all show ✅
+4. Click "Export Results"
+5. Label physical remote as PASS/FAIL
+6. Click "Reset Test"
+7. Repeat for next remote
+
+END OF DAY:
+1. Review all exported test results
+2. Archive results to network drive
+3. Close application
+4. Keep VIRC device connected (or unplug safely)
+
+===============================================
+FILE LOCATIONS
+===============================================
+
+Application Files:
+- GUI App: python_test/complete_gui.py
+- CLI App: python_test/main.py
+- Firmware: virc_firmware/virc_firmware.ino
+
+Test Results:
+- Saved in: python_test/ folder
+- Format: QC_Test_Results_YYYYMMDD_HHMMSS.txt
+
+Logs:
+- Displayed in GUI log window
+- Not saved automatically (use Export Results)
+
+===============================================
+SUPPORT
+===============================================
+
+For technical issues:
+- Contact: [Your Team Contact Info]
+- Email: [Your Email]
+- Internal Support: [Ticket System]
+
+For firmware updates:
+- See: FIRMWARE_UPLOAD_GUIDE.txt
+- Contact development team
+
+Version: 1.1
+Last Updated: 2025-10-28
